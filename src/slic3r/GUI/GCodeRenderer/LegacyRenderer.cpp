@@ -314,6 +314,7 @@ namespace Slic3r {
             void LegacyRenderer::reset()
             {
                 m_moves_count = 0;
+                m_ssid_arc_points_sum.clear();
                 for (TBuffer& buffer : m_buffers) {
                     buffer.reset();
                 }
@@ -1446,6 +1447,14 @@ namespace Slic3r {
                 m_ssid_to_moveid_map.reserve(m_moves_count - biased_seams_ids.size());
                 for (size_t i = 0; i < m_moves_count - biased_seams_ids.size(); i++)
                     m_ssid_to_moveid_map.push_back(extract_move_id(i));
+                m_ssid_arc_points_sum.clear();
+                m_ssid_arc_points_sum.reserve(m_ssid_to_moveid_map.size());
+                for (size_t i = 0, sum = 0; i < m_ssid_to_moveid_map.size(); i++) {
+                    const GCodeProcessorResult::MoveVertex& move = gcode_result.moves[m_ssid_to_moveid_map[i]];
+                    if (move.is_arc_move())
+                        sum += move.interpolation_points.size();
+                    m_ssid_arc_points_sum.push_back(sum);
+                }
 #if ENABLE_GCODE_VIEWER_STATISTICS
                 auto load_vertices_time = std::chrono::high_resolution_clock::now();
                 m_statistics.load_vertices = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
@@ -2006,11 +2015,16 @@ namespace Slic3r {
                         size_t max_s_id = std::min(p_sequential_view->current.last, sub_path.last.s_id);
                         size_t min_s_id = std::max(p_sequential_view->current.first, sub_path.first.s_id);
                         unsigned int segments_count = max_s_id - min_s_id;
-                        for (size_t i = min_s_id + 1; i < max_s_id + 1; i++) {
-                            size_t move_id = m_ssid_to_moveid_map[i];
-                            const GCodeProcessorResult::MoveVertex& curr = m_gcode_result->moves[move_id];
-                            if (curr.is_arc_move()) {
-                                segments_count += curr.interpolation_points.size();
+                        if (max_s_id < m_ssid_arc_points_sum.size() && min_s_id <= max_s_id) {
+                            // arc points of the moves in (min_s_id, max_s_id]
+                            segments_count += m_ssid_arc_points_sum[max_s_id] - m_ssid_arc_points_sum[min_s_id];
+                        } else {
+                            for (size_t i = min_s_id + 1; i < max_s_id + 1; i++) {
+                                size_t move_id = m_ssid_to_moveid_map[i];
+                                const GCodeProcessorResult::MoveVertex& curr = m_gcode_result->moves[move_id];
+                                if (curr.is_arc_move()) {
+                                    segments_count += curr.interpolation_points.size();
+                                }
                             }
                         }
                         size_in_indices = buffer.indices_per_segment() * segments_count;
