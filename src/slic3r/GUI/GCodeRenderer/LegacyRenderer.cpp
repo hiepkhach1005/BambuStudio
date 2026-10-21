@@ -2020,11 +2020,18 @@ namespace Slic3r {
                     }
                     if (size_in_indices == 0)
                         continue;
-                    render_path->sizes.push_back(size_in_indices);
                     if (buffer.render_primitive_type == TBuffer::ERenderPrimitiveType::Triangle) {
                         delta_1st *= buffer.indices_per_segment();
                     }
-                    render_path->offsets.push_back(static_cast<size_t>((sub_path.first.i_id + delta_1st) * sizeof(IBufferType)));
+                    const size_t offset = static_cast<size_t>((sub_path.first.i_id + delta_1st) * sizeof(IBufferType));
+                    // Extend the previous draw when this one follows it in the index buffer: every draw of a
+                    // glMultiDrawElements call costs CPU time, a lot through the macOS OpenGL to Metal layer.
+                    if (!render_path->offsets.empty() && render_path->offsets.back() + render_path->sizes.back() * sizeof(IBufferType) == offset) {
+                        render_path->sizes.back() += size_in_indices;
+                    } else {
+                        render_path->sizes.push_back(size_in_indices);
+                        render_path->offsets.push_back(offset);
+                    }
 #if 0
                     // check sizes and offsets against index buffer size on gpu
                     GLint buffer_size;
