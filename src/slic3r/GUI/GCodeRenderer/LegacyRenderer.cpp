@@ -1752,6 +1752,10 @@ namespace Slic3r {
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": finished, m_buffers size %1%!") % m_buffers.size();
                 return !m_layers.empty();
             }
+            // Upper bound of a draw made of contiguous sub paths in refresh_render_paths(). On macOS, rotating a
+            // 1005 layer plate went from 53 to 40 fps with unbounded draws and back to 52 fps with this bound.
+            static constexpr unsigned int MAX_MERGED_DRAW_INDICES = 65536;
+
             void LegacyRenderer::refresh_render_paths(bool keep_sequential_current_first, bool keep_sequential_current_last) const
             {
 #if ENABLE_GCODE_VIEWER_STATISTICS
@@ -2040,7 +2044,9 @@ namespace Slic3r {
                     const size_t offset = static_cast<size_t>((sub_path.first.i_id + delta_1st) * sizeof(IBufferType));
                     // Extend the previous draw when this one follows it in the index buffer: every draw of a
                     // glMultiDrawElements call costs CPU time, a lot through the macOS OpenGL to Metal layer.
-                    if (!render_path->offsets.empty() && render_path->offsets.back() + render_path->sizes.back() * sizeof(IBufferType) == offset) {
+                    // Keep the merged draws bounded though, much larger draws were slower on the GPU there.
+                    if (!render_path->offsets.empty() && render_path->offsets.back() + render_path->sizes.back() * sizeof(IBufferType) == offset &&
+                        render_path->sizes.back() + size_in_indices <= MAX_MERGED_DRAW_INDICES) {
                         render_path->sizes.back() += size_in_indices;
                     } else {
                         render_path->sizes.push_back(size_in_indices);
