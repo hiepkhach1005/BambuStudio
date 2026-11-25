@@ -360,7 +360,7 @@ struct Engine::Impl
                 ap.height       = o->instance_bounding_box(k).max.z();
                 ap.name         = o->name;
                 ap.bed_idx      = 0;
-                const int ext   = std::max(1, o->config.extruder());
+                const int ext   = (o->config.has("extruder") ? std::max(1, o->config.extruder()) : 1);
                 ap.extrude_id_filament_types[ext] = "";
                 ap.print_temp = 220; ap.first_print_temp = 220; ap.bed_temp = 55; ap.first_bed_temp = 55; ap.vitrify_temp = 100;
                 items.push_back(ap);
@@ -414,7 +414,7 @@ json Engine::Impl::state()
     json objs = json::array();
     for (int oi = 0; oi < (int) model.objects.size(); ++oi) {
         ModelObject *o = model.objects[oi];
-        json jo{{"index", oi}, {"id", (long long) o->id().id}, {"name", o->name}, {"extruder", std::max(1, o->config.extruder())}, {"facets", (long long) o->facets_count()}};
+        json jo{{"index", oi}, {"id", (long long) o->id().id}, {"name", o->name}, {"extruder", (o->config.has("extruder") ? std::max(1, o->config.extruder()) : 1)}, {"facets", (long long) o->facets_count()}};
         json vs = json::array();
         for (int vi = 0; vi < (int) o->volumes.size(); ++vi) {
             ModelVolume *v = o->volumes[vi];
@@ -483,7 +483,8 @@ json Engine::Impl::open(const json &a)
         Model m;
         if (boost::iends_with(path, ".step") || boost::iends_with(path, ".stp")) {
             bool cancel = false;
-            if (!load_step(path.c_str(), &m, cancel)) throw std::runtime_error("cannot read STEP file");
+            Step step(path);
+            if (step.load() != Step::Step_Status::LOAD_SUCCESS || step.mesh(&m, cancel, false) != Step::Step_Status::MESH_SUCCESS) throw std::runtime_error("cannot read STEP file");
             m.add_default_instances();
         } else if (is3mf) {
             DynamicPrintConfig c; ConfigSubstitutionContext sc(ForwardCompatibilitySubstitutionRule::EnableSilent);
@@ -974,7 +975,24 @@ json Engine::Impl::dispatch(const std::string &cmd, const json &a)
     if (cmd == "auto_orient") {
         checkpoint();
         ModelObject *o = object(a);
-        orientation::orient(o);
+        for (ModelInstance *in : o->instances) { // as OrientJob: every instance keeps its own rotation
+            orientation::OrientMesh om;
+            om.name = o->name;
+            om.mesh = o->raw_mesh();
+            om.mesh.transform(in->get_transformation().get_matrix(true, false, false, false));
+            om.setter = [in](const orientation::OrientMesh &p) {
+                in->rotate(p.rotation_matrix);
+                in->get_object()->invalidate_bounding_box();
+            };
+            orientation::OrientMeshs sel{om};
+            orientation::OrientParams params;
+            orientation::OrientParamsArea area;
+            memcpy(&params, &area, sizeof(params)); // the desktop does the same
+            params.stopcondition = [] { return false; };
+            params.progressind   = [](unsigned, std::string) {};
+            orientation::orient(sel, {}, params);
+            sel.front().apply();
+        }
         o->invalidate_bounding_box();
         o->ensure_on_bed();
         return state();
@@ -1007,7 +1025,7 @@ json Engine::Impl::dispatch(const std::string &cmd, const json &a)
             for (ModelVolume *v : o->volumes) {
                 ModelVolume *nv = n->add_volume(*v);
                 nv->set_transformation(Geometry::Transformation(o->instances.front()->get_matrix() * v->get_matrix()));
-                if (!nv->config.has("extruder")) nv->config.set("extruder", std::max(1, o->config.extruder()));
+                if (!nv->config.has("extruder")) nv->config.set("extruder", (o->config.has("extruder") ? std::max(1, o->config.extruder()) : 1));
             }
         }
         n->add_instance();

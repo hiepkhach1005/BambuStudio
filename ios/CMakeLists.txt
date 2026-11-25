@@ -88,3 +88,12 @@ target_link_libraries(slice_spike libslic3r ios_shim Boost::nowide "-framework U
 add_library(engine STATIC EXCLUDE_FROM_ALL app/engine/Engine.cpp app/engine/Bridge.mm app/engine/Lan.mm)
 set_source_files_properties(app/engine/Bridge.mm app/engine/Lan.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 target_link_libraries(engine PUBLIC libslic3r ios_shim Boost::nowide OpenSSL::SSL)
+
+# Swift is compiled to one object by scripts/build_app.sh
+set(SWIFT_OBJ "${CMAKE_CURRENT_SOURCE_DIR}/build/swift/app.o")
+set_source_files_properties("${SWIFT_OBJ}" PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+execute_process(COMMAND xcrun --find swiftc OUTPUT_VARIABLE SWIFTC OUTPUT_STRIP_TRAILING_WHITESPACE)
+get_filename_component(SWIFT_LIB "${SWIFTC}/../../lib/swift/iphoneos" ABSOLUTE)
+add_executable(touchstudio MACOSX_BUNDLE EXCLUDE_FROM_ALL "${SWIFT_OBJ}")
+set_target_properties(touchstudio PROPERTIES LINKER_LANGUAGE OBJCXX LINK_FLAGS "-L${CMAKE_OSX_SYSROOT}/usr/lib/swift -L${SWIFT_LIB} -Wl,-rpath,/usr/lib/swift")
+target_link_libraries(touchstudio engine "-framework UIKit" "-framework Foundation" "-framework CoreText" "-framework CoreGraphics" "-framework Security" iconv)

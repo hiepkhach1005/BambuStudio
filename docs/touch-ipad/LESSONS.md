@@ -17,3 +17,6 @@
 - iOS: cần SLIC3R_PCH=1; tránh Homebrew lọt vào (CMAKE_IGNORE_PREFIX_PATH); thư mục tên `resources` trong .app làm codesign hiểu nhầm kiểu macOS.
 - Chạy lại iPad: ios/scripts/build_core.sh slice_spike, rồi ios/scripts/install_spike.sh <udid> [file.3mf].
 - Harness 3mf: nạp vào DynamicPrintConfig rỗng; full_print_config() có enum thiếu keys_map, gây SIGSEGV. Nền lấy từ PresetBundle::full_config().
+- ModelConfig::extruder() sập nếu thiếu khóa; kiểm has() trước. orientation::orient(ModelObject*) bỏ qua xoay của instance; dùng OrientMesh.
+- Xcode 27: @State mỗi dòng một biến. Dùng --selftest (Documents/selftest) để kiểm app và lấy ảnh.
+- UI iPad: phải so ảnh với Bambu Studio và đối chiếu mặc định trước khi báo "giống bố cục gốc"; ngôn ngữ mặc định tiếng Anh.

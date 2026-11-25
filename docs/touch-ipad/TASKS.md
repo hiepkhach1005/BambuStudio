@@ -14,7 +14,7 @@ Trạng thái: todo / doing / code (chưa biên dịch) / built / tested / block
 | W5 | Cầu nối C++ ↔ web, ray trái | Plater.*, TouchWeb/*.cpp | Sonnet | code |
 | W6 | Toolbar dưới, nút Slice lớn | GLToolbar, GLCanvas3D (sau W2), GLGizmosManager | Sonnet | code |
 | W7 | Bàn phím ảo | Field.*, Widgets/TextInput | Haiku | todo |
-| I0/I1a | Thí nghiệm và deps iOS | ios/cmake, ios/scripts, ios/spikes | Sonnet | deps xong, spike chưa |
-| I1b..I6 | Theo ARCHITECTURE.md mục 12 | theo mục 12 | Haiku | todo, chờ cổng I1c |
+| I0/I1a | Thí nghiệm và deps iOS | ios/cmake, ios/scripts, ios/spikes | Sonnet | xong |
+| I1b..I6 | Theo ARCHITECTURE.md mục 12 | theo mục 12 | Haiku | V1–V4 có code và chạy trên iPad; còn: thử LAN, gizmo kéo, chữ/khắc/boolean/đo, phân tách đầu nối khi cắt, thumbnail 3mf, tô khối lượng lớn, in lần đầu |
 
 Các sửa src/ dùng chung cho iPad (I3a) chỉ làm sau W5/W6.

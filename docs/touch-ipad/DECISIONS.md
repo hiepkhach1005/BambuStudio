@@ -15,3 +15,4 @@ Ngày 2026-11-25.
 | 9 | (2026-11-25, thay bản trước) Agent mới chỉ Haiku để tiết kiệm token | Người dùng |
 | 10 | Không push, không commit khi chưa được yêu cầu | Quy tắc |
 | 11 | (2026-11-25) touch_mode mặc định tự động: cảm ứng + ≤ 11" bật; 11–16" chỉ bật ở tư thế tablet; vẫn có On/Off | Người dùng yêu cầu tự động, ngưỡng do Claude chọn |
+| 12 | (2026-11-25, thay 7) iPad: SwiftUI + renderer Metal riêng + Engine C++ (JSON) trên libslic3r; không tái dùng GUI wx. Lý do: làm đủ V1–V4 mà không sửa src/ | Claude chọn |
