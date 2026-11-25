@@ -1,0 +1,16 @@
+@import "tailwindcss";
+:root { --bg:#eceef1; --panel:#ffffff; --card:#ffffff; --row:#f1f3f5; --fg:#16181d; --mute:#555d6b; --line:#cfd4dc; --accent:#00AE42; --danger:#d93036; }
+:root[data-theme="dark"] { --bg:#14161a; --panel:#1b1e24; --card:#242831; --row:#2f3440; --fg:#f1f3f5; --mute:#a3abb8; --line:#394050; --danger:#ef5a5f; }
+@theme inline { --color-bg: var(--bg); --color-panel: var(--panel); --color-card: var(--card); --color-row: var(--row); --color-fg: var(--fg); --color-mute: var(--mute); --color-line: var(--line); --color-accent: var(--accent); --color-danger: var(--danger); }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.3 system-ui, "Segoe UI", sans-serif; touch-action: manipulation; user-select: none; -webkit-user-select: none; overflow: hidden; }
+input, textarea { user-select: text; -webkit-user-select: text; }
+.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+@layer base { button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s, filter .15s, transform .1s; } }
+button:active:not(:disabled) { filter: brightness(1.15); transform: scale(.97); }
+button:disabled { opacity: .4; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel-in { animation: panel-in .18s ease-out; }
+@keyframes panel-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .panel-in { animation: none; } button, [data-thumb] { transition: none !important; } button:active:not(:disabled) { transform: none; } }

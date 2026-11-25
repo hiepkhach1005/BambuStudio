@@ -308,7 +308,8 @@ struct ToolbarLayout
     {
         TopLeft,
         TopMiddle,
-        Custom
+        Custom,
+        BottomMiddle // touch mode: bottom centre, extra (expanded) rows grow upwards; honoured by ToolbarKeepSizeRenderer only
     };
 
     EType type;
@@ -374,6 +375,11 @@ public:
 
     void set_position_mode(ToolbarLayout::EPositionMode t_position_mode);
     void set_offset(float offset);
+    // World y (centred origin, +y up) of the top edge of everything drawn by the last render; used to anchor popups
+    // above a bottom-positioned toolbar. Written by the renderer, so geometry has a single source.
+    void  set_block_top_world(float v) const { m_block_top_world = v; }
+    float get_block_top_world() const { return m_block_top_world; }
+    bool  is_bottom_positioned() const { return m_layout.position_mode == ToolbarLayout::EPositionMode::BottomMiddle; }
     void set_position(float top, float left);
     void set_border(float border);
     void set_separator_size(float size);
@@ -503,6 +509,7 @@ private:
     bool m_b_collapsed{ true };
 
     EToolbarRenderingMode m_rendering_mode{ EToolbarRenderingMode::Auto };
+    mutable float m_block_top_world{ 0.0f };
 
     mutable GLTexture m_images_texture;
     mutable bool m_images_texture_dirty;

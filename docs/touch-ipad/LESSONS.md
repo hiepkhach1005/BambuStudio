@@ -1,0 +1,19 @@
+# Bài học
+
+- Widgets/*.cpp nhiều file ở namespace toàn cục: dùng Slic3r::GUI::GUI_App.
+- zsh: grep --include phải để trong nháy đơn.
+- Code chưa qua trình biên dịch thì ghi "chưa biên dịch", không ghi "xong".
+- Không chỉ bật wxTOUCH_PAN_GESTURES: có thể cướp thao tác kéo 1 ngón (issue #13048).
+- wx gesture không lan lên cửa sổ cha; cảm ứng tới HWND con (báo cáo W1).
+- wxEVT_DESTROY là command event, lan từ con: luôn kiểm GetEventObject().
+- Không gửi LBUTTONUP giả để hủy: control nghe LEFT_UP có thể vẫn chạy. Giữ cú nhấn rồi phát lại.
+- Test logic thuần không chứng minh phần Win32.
+- Picking tính lúc render: sự kiện giả phải render giữa di chuyển và nhấn.
+- Menu modal có thể nuốt sự kiện nhả ngón; gỡ trạng thái bằng cờ primary.
+- Không include windows.h ở đầu file (winsock2, macro min/max).
+- UI phải chụp ảnh ở đúng cỡ máy; test đơn vị không thấy lỗi bố cục.
+- GLES của Bambu Studio nặng hơn Orca: không có nhánh ES; OpenVDB và OpenSSL phải giữ (PRIOR_ART).
+- W5 còn thiếu: danh sách Objects không hiện vật nằm ngoài mọi plate; nút thu gọn sidebar vô hiệu khi sidebar gốc đang bị ray ẩn; đổi DPI chưa tính lại bề rộng ray. Dùng Advanced để thay thế, kiểm tra trên máy.
+- iOS: cần SLIC3R_PCH=1; tránh Homebrew lọt vào (CMAKE_IGNORE_PREFIX_PATH); thư mục tên `resources` trong .app làm codesign hiểu nhầm kiểu macOS.
+- Chạy lại iPad: ios/scripts/build_core.sh slice_spike, rồi ios/scripts/install_spike.sh <udid> [file.3mf].
+- Harness 3mf: nạp vào DynamicPrintConfig rỗng; full_print_config() có enum thiếu keys_map, gây SIGSEGV. Nền lấy từ PresetBundle::full_config().

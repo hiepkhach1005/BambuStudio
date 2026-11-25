@@ -1475,7 +1475,7 @@ void GLGizmosManager::add_toolbar_items(const std::shared_ptr<GLToolbar>& p_tool
             if (p_gizmo_manager->get_current_type() != idx) {
                 return;
             }
-            float cnv_h = (float)p_gizmo_manager->m_parent.get_canvas_size().get_height();
+            float cnv_h = p_gizmo_manager->m_parent.get_main_toolbar_free_bottom(); // full height unless the toolbar is at the bottom (touch mode)
             p_gizmo_manager->m_gizmos[idx]->render_input_window(left, toolbar_height, cnv_h);
         };
         item.pressed_recheck_callback = [p_gizmo_manager, t_type]()->bool {

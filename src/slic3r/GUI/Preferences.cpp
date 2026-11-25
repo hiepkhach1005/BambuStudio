@@ -1506,6 +1506,12 @@ wxWindow *PreferencesDialog::create_general_tab()
     auto item_beta_version_update = create_item_checkbox(_L("Support beta version update."), scrolled, _L("With this option enabled, you can receive beta version updates."), 50,
                                                          "enable_beta_version_update");
 
+#ifdef _WIN32
+    auto item_touch_mode = create_item_combobox(_L("Touch mode"), scrolled,
+                                                _L("Automatic turns the touch interface on when the window opens on a small touch screen. Restart Bambu Studio for this to take effect."),
+                                                "touch_mode", std::vector<wxString>{_L("Automatic"), _L("On"), _L("Off")}, std::vector<std::string>{"auto", "1", "0"});
+#endif
+
     // User Experience Improvement Program + "what data" hyperlink.
     auto  item_priv_policy = create_item_checkbox(_L("Join the User Experience Improvement Program."), scrolled, "", 50, "privacyuse");
     auto *hyperlink        = new Label(scrolled, wxString::FromUTF8(_CTX_utf8(L_CONTEXT("Learn more", "Preferences"), "Preferences")));
@@ -1537,6 +1543,9 @@ wxWindow *PreferencesDialog::create_general_tab()
     sizer->Add(wrap_option_row(scrolled, item_fila_manager), flags);
     sizer->Add(wrap_option_row(scrolled, item_multi_machine), flags);
     sizer->Add(wrap_option_row(scrolled, item_beta_version_update), flags);
+#ifdef _WIN32
+    sizer->Add(wrap_option_row(scrolled, item_touch_mode), flags);
+#endif
     auto *priv_row = wrap_option_row(scrolled, item_priv_policy);
     if (wxGetApp().is_uep_force_disabled())
         priv_row->SetToolTip(minor_restricted_tip());
@@ -2148,6 +2157,7 @@ void PreferencesDialog::on_reset_preferences()
         FilaManagerEnabledConfigKey,
         "enable_multi_machine",
         "enable_beta_version_update",
+        "touch_mode",
         "privacyuse",
         "download_path",
         "webview_auto_fill",

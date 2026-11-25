@@ -228,6 +228,8 @@
 
 #include "HelioReleaseNote.hpp"
 #include "libslic3r/Log.hpp"
+#include "Widgets/TouchScroll.hpp"
+#include "TouchWeb/TouchSidebar.hpp"
 
 using boost::optional;
 namespace fs = boost::filesystem;
@@ -4570,6 +4572,7 @@ Sidebar::Sidebar(Plater *parent)
         add_btn->Bind(wxEVT_BUTTON, [this, scrolled_sizer](wxCommandEvent& e) {
             add_filament();
         });
+        if (GUI_App::is_touch_mode()) add_btn->SetMinSize(wxSize(FromDIP(44), FromDIP(44)));
         p->m_bpButton_add_filament = add_btn;
         subtitle_sizer->Add(add_btn, 0, wxALIGN_CENTER_VERTICAL);
 
@@ -4596,6 +4599,7 @@ Sidebar::Sidebar(Plater *parent)
 
     // ---- Physical filament scroll area (independent scrollbar) ----
     p->m_physical_scroll_area = new wxScrolledWindow(p->m_filament_area_wrapper, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+    install_touch_scroll(p->m_physical_scroll_area);
     p->m_physical_scroll_area->SetScrollbars(0, 100, 1, 2);
     p->m_physical_scroll_area->SetScrollRate(0, 5);
     p->m_physical_scroll_area->SetBackgroundColour(*wxWHITE);
@@ -4646,7 +4650,7 @@ Sidebar::Sidebar(Plater *parent)
     {
         p->m_btn_add_mixed_filament = new wxPanel(p->m_filament_area_wrapper, wxID_ANY);
         p->m_btn_add_mixed_filament->SetBackgroundColour(StateColor::darkModeColorFor(wxColour("#F8F8F8")));
-        p->m_btn_add_mixed_filament->SetMinSize(wxSize(-1, FromDIP(23)));
+        p->m_btn_add_mixed_filament->SetMinSize(wxSize(-1, FromDIP(GUI_App::is_touch_mode() ? 44 : 23)));
 
         p->m_btn_add_mixed_filament->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
             wxPaintDC dc(p->m_btn_add_mixed_filament);
@@ -4705,6 +4709,7 @@ Sidebar::Sidebar(Plater *parent)
 
         p->m_btn_mixed_add = new ScalableButton(p->m_panel_mixed_title, wxID_ANY, "add_filament");
         p->m_btn_mixed_add->SetToolTip(_L("Add mixed filament"));
+        if (GUI_App::is_touch_mode()) p->m_btn_mixed_add->SetMinSize(wxSize(FromDIP(44), FromDIP(44)));
         p->m_btn_mixed_add->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { add_mixed_filament(); });
         title_sizer->Add(p->m_btn_mixed_add, 0, wxALIGN_CENTER_VERTICAL);
 
@@ -4727,6 +4732,7 @@ Sidebar::Sidebar(Plater *parent)
 
     // 3) Mixed filament scroll area (independent scrollbar)
     p->m_mixed_scroll_area = new wxScrolledWindow(p->m_filament_area_wrapper, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+    install_touch_scroll(p->m_mixed_scroll_area);
     p->m_mixed_scroll_area->SetScrollbars(0, 100, 1, 2);
     p->m_mixed_scroll_area->SetScrollRate(0, 5);
     p->m_mixed_scroll_area->SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
@@ -4917,6 +4923,9 @@ void Sidebar::create_printer_preset()
     }
 }
 
+// Minimum height (DIP) of a filament combo row; larger in touch mode.
+static int filament_row_min_dip() { return GUI_App::is_touch_mode() ? 44 : 30; }
+
 // TextInput::SetMinSize() (the base class of PlaterPresetComboBox) special-cases a
 // negative height as "keep whatever the control's current on-screen height already
 // is" rather than "unset". Since messureSize() is re-run on every SetLabel() (preset
@@ -4932,7 +4941,7 @@ void Sidebar::priv::reset_filament_combo_min_heights()
 {
     for (auto *combo : combos_filament) {
         if (combo != nullptr)
-            combo->SetMinSize(wxSize(combo->GetMinSize().GetWidth(), FromDIP(30)));
+            combo->SetMinSize(wxSize(combo->GetMinSize().GetWidth(), FromDIP(filament_row_min_dip())));
     }
 }
 
@@ -5082,7 +5091,7 @@ void Sidebar::init_filament_combo(PlaterPresetComboBox **combo, const int filame
     combo_and_btn_sizer->Add(FromDIP(10), 0, 0, 0, 0 );
     (*combo)->clr_picker->SetLabel(wxString::Format("%d", filament_idx + 1));
     combo_and_btn_sizer->Add((*combo)->clr_picker, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(4));
-    combo_and_btn_sizer->Add(*combo, 1, wxALL | wxEXPAND, FromDIP(2))->SetMinSize({-1, FromDIP(30)});
+    combo_and_btn_sizer->Add(*combo, 1, wxALL | wxEXPAND, FromDIP(2))->SetMinSize({-1, FromDIP(filament_row_min_dip())});
 
     /* BBS hide del_btn
     ScalableButton* del_btn = new ScalableButton(p->m_panel_filament_content, wxID_ANY, "delete_filament");
@@ -9005,7 +9014,7 @@ void Sidebar::update_mixed_filament_list(bool reload_3d)
             size_t panel_idx = i;
             content_panel->Bind(wxEVT_LEFT_UP, [this, panel_idx](wxMouseEvent&) { edit_mixed_filament(panel_idx); });
 
-            combo_and_btn_sizer->Add(content_panel, 1, wxALL | wxEXPAND, FromDIP(2))->SetMinSize({-1, FromDIP(30)});
+            combo_and_btn_sizer->Add(content_panel, 1, wxALL | wxEXPAND, FromDIP(2))->SetMinSize({-1, FromDIP(filament_row_min_dip())});
 
             auto* menu_btn = new ScalableButton(p->m_panel_mixed_content, wxID_ANY,
                 is_broken ? "error" : "menu_filament");
@@ -10465,6 +10474,8 @@ public:
     Sidebar *  sidebar;
     AuiMgr                 m_aui_mgr;
     wxString               m_default_window_layout;
+    // Touch mode only (null otherwise): React sidebar hosted in its own aui pane.
+    std::unique_ptr<TouchSidebar> m_touch_sidebar;
     struct SidebarLayout
     {
         bool is_enabled{false};
@@ -10705,6 +10716,10 @@ public:
     void collapse_sidebar(bool collapse);
     void                  update_sidebar(bool force_update = false);
     void                  reset_window_layout(int width);
+    // Touch mode: create/size the web sidebar pane, and save the layout without touch-mode artefacts.
+    void                  init_touch_sidebar();
+    void                  apply_touch_pane(bool update);
+    wxString              save_window_layout();
     // A loaded perspective carries the minimum it was saved with, so this runs after every load.
     void                  apply_sidebar_min_size();
     Sidebar::DockingState get_sidebar_docking_state();
@@ -11450,6 +11465,8 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         m_aui_mgr.Update();
     }
 
+    if (GUI_App::is_touch_mode() && wxGetApp().is_editor()) init_touch_sidebar();
+
     menus.init(main_frame);
 
 
@@ -12112,7 +12129,7 @@ void Plater::priv::update_sidebar(bool force_update)
     } else {
         // Only hide if collapsed or is floating and is not 3d view
         const bool should_hide = sidebar_layout.is_collapsed || (sidebar.IsFloating() && !sidebar_layout.show);
-        const bool should_show = !should_hide;
+        const bool should_show = !should_hide && !(m_touch_sidebar && m_touch_sidebar->hides_native());
         if (should_show != sidebar.IsShown()) {
             sidebar.Show(should_show);
             needs_update = true;
@@ -12141,7 +12158,56 @@ void Plater::priv::reset_window_layout(int width)
     }
     apply_sidebar_min_size();
     sidebar_layout.is_collapsed = false;
+    apply_touch_pane(false); // the loaded perspective knows nothing about the touch pane
     update_sidebar(true);
+}
+
+void Plater::priv::init_touch_sidebar()
+{
+    TouchSidebar::Callbacks cb;
+    cb.width_changed  = [this]() { apply_touch_pane(true); };
+    cb.native_toggled = [this]() {
+        if (!m_touch_sidebar->hides_native()) collapse_sidebar(false); // a collapsed state must not swallow the request
+        update_sidebar(true);
+    };
+    cb.failed         = [this]() {
+        apply_touch_pane(false); // hides the pane because the sidebar failed
+        update_sidebar(true);    // native sidebar is visible again
+    };
+    m_touch_sidebar = std::make_unique<TouchSidebar>(q, cb);
+    m_aui_mgr.AddPane(m_touch_sidebar->window(), wxAuiPaneInfo().Name("touch_sidebar").Left().Layer(TouchSidebar::kPaneLayer)
+                                                     .CloseButton(false).CaptionVisible(false).Gripper(false).PaneBorder(false)
+                                                     .Floatable(false).Movable(false).Resizable(false)
+                                                     .TopDockable(false).BottomDockable(false).RightDockable(false));
+    apply_touch_pane(false);
+    m_aui_mgr.GetPane(sidebar).Show(false); // hidden by default in touch mode; 'open_advanced' brings it back
+    m_aui_mgr.Update();
+    update_sidebar(true);
+    m_touch_sidebar->start();
+}
+
+void Plater::priv::apply_touch_pane(bool update)
+{
+    if (!m_touch_sidebar) return;
+    wxAuiPaneInfo &pane = m_aui_mgr.GetPane(m_touch_sidebar->window());
+    if (!pane.IsOk()) return;
+    const int w = q->FromDIP(m_touch_sidebar->width_dip());
+    pane.Left().Layer(TouchSidebar::kPaneLayer).MinSize(w, -1).MaxSize(w, -1).BestSize(w, -1);
+    pane.Show(!m_touch_sidebar->failed());
+    if (update) m_aui_mgr.Update();
+}
+
+wxString Plater::priv::save_window_layout()
+{
+    if (!m_touch_sidebar) return m_aui_mgr.SavePerspective();
+    // Save what the layout would be with touch mode off: native sidebar in its normal state, no touch pane.
+    // Only pane flags change here (no Update()), they are restored below.
+    wxAuiPaneInfo &native = m_aui_mgr.GetPane(sidebar);
+    const bool native_shown = native.IsShown();
+    native.Show(!sidebar_layout.is_collapsed);
+    const wxString layout = TouchSidebar::strip_from_perspective(m_aui_mgr.SavePerspective());
+    native.Show(native_shown);
+    return layout;
 }
 
 void Plater::priv::apply_sidebar_min_size()
@@ -15078,8 +15144,10 @@ void Plater::priv::reset(bool apply_presets_change)
     if (sidebar_layout.is_enabled) {
         // Reset show state
         auto &sidebar = m_aui_mgr.GetPane(this->sidebar);
+        const bool native_was_shown = sidebar.IsShown();
         if (!sidebar_layout.is_collapsed && !sidebar.IsShown()) { sidebar.Show(); }
-        auto layout = m_aui_mgr.SavePerspective();
+        auto layout = m_touch_sidebar ? save_window_layout() : m_aui_mgr.SavePerspective();
+        if (m_touch_sidebar) sidebar.Show(native_was_shown); // keep the touch-mode hiding of the native sidebar
         wxGetApp().app_config->set("window_layout", layout.utf8_string());
     }
 }
@@ -20919,6 +20987,7 @@ void Plater::priv::on_change_color_mode(SimpleEvent& evt) {
     assemble_view->get_canvas3d()->on_change_color_mode(m_is_dark);
     if (m_send_to_sdcard_dlg) m_send_to_sdcard_dlg->on_change_color_mode();
     apply_color_mode();
+    if (m_touch_sidebar) m_touch_sidebar->on_sys_color_changed();
 }
 
 void Plater::priv::apply_color_mode()
@@ -32661,6 +32730,8 @@ GLToolbar& Plater::get_collapse_toolbar()
 }
 
 int Plater::get_collapse_toolbar_size() {
+    if (GUI_App::is_touch_mode()) // base scale already includes touch_toolbar_factor
+        return std::lround(44.0f * wxGetApp().toolbar_icon_scale(false) / GUI_App::touch_toolbar_factor());
     return std::lround(20.0f * wxGetApp().toolbar_icon_scale(false));
 }
 

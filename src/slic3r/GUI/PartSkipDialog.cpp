@@ -144,7 +144,7 @@ PartSkipDialog::PartSkipDialog(wxWindow *parent) : DPIDialog(parent, wxID_ANY, _
     auto all_checkbox_sizer = new wxBoxSizer(wxHORIZONTAL);
     m_all_checkbox          = new CheckBox(m_book_third_panel, wxID_ANY);
     m_all_checkbox->SetValue(false);
-    m_all_checkbox->SetMinSize(wxSize(FromDIP(18), FromDIP(18)));
+    m_all_checkbox->SetMinSize(wxSize(FromDIP(CheckBox::icon_size()), FromDIP(CheckBox::icon_size())));
     m_all_checkbox->SetBackgroundColour(*wxWHITE);
     m_all_label = new Label(m_book_third_panel, _L("Select All"));
     m_all_label->Wrap(-1);
@@ -356,7 +356,7 @@ void PartSkipDialog::on_dpi_changed(const wxRect &suggested_rect)
     m_second_retry_btn->SetCornerRadius(FromDIP(16));
     m_second_retry_btn->Rescale();
 
-    m_all_checkbox->SetMinSize(wxSize(FromDIP(18), FromDIP(18)));
+    m_all_checkbox->SetMinSize(wxSize(FromDIP(CheckBox::icon_size()), FromDIP(CheckBox::icon_size())));
     m_all_checkbox->Rescale();
 
     for (auto it = m_scroll_sizer->GetChildren().begin(); it != m_scroll_sizer->GetChildren().end(); ++it) {
@@ -367,7 +367,7 @@ void PartSkipDialog::on_dpi_changed(const wxRect &suggested_rect)
             if (check_item && check_item->IsWindow()) {
                 wxWindow *window   = check_item->GetWindow();
                 CheckBox *checkbox = dynamic_cast<CheckBox *>(window);
-                checkbox->SetMinSize(wxSize(FromDIP(18), FromDIP(18)));
+                checkbox->SetMinSize(wxSize(FromDIP(CheckBox::icon_size()), FromDIP(CheckBox::icon_size())));
                 checkbox->Rescale();
             }
         }
@@ -782,8 +782,8 @@ void PartSkipDialog::InitDialogUI()
             label->Wrap(-1);
             label->SetMinSize(wxSize(-1, FromDIP(18)));
             checkbox->SetBackgroundColour(*wxWHITE);
-            checkbox->SetMinSize(wxSize(FromDIP(18), FromDIP(18)));
-            checkbox->SetMaxSize(wxSize(FromDIP(18), FromDIP(18)));
+            checkbox->SetMinSize(wxSize(FromDIP(CheckBox::icon_size()), FromDIP(CheckBox::icon_size())));
+            checkbox->SetMaxSize(wxSize(FromDIP(CheckBox::icon_size()), FromDIP(CheckBox::icon_size())));
 
             line_sizer->Add(checkbox, 0, wxALIGN_CENTER_VERTICAL, 0);
             line_sizer->Add(label, 1, wxLEFT | wxALIGN_CENTER_VERTICAL, FromDIP(8));

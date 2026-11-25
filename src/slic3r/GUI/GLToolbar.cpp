@@ -1775,6 +1775,7 @@ void ToolbarAutoSizeRenderer::calculate_position(const GLToolbar& t_toolbar, con
 
         break;
     }
+    case ToolbarLayout::EPositionMode::BottomMiddle: // not supported by this renderer, behave as TopMiddle
     case ToolbarLayout::EPositionMode::TopMiddle:
     {
         float inv_zoom = (float)t_camera.get_inv_zoom();
@@ -1921,13 +1922,21 @@ void ToolbarKeepSizeRenderer::render(const GLToolbar& t_toolbar, const Camera& t
     float top = 0.0f;
     calculate_position(t_toolbar, t_camera, final_toolbar_width, final_toolbar_height, left, top);
 
+    const bool bottom_mode = t_layout.position_mode == ToolbarLayout::EPositionMode::BottomMiddle;
+    float block_top = top;
     if (t_layout.collapsed_offset < 1e-6f || t_toolbar.is_collapsed()) {
         float scaled_width = final_toolbar_width * inv_zoom;
         float scaled_height = final_toolbar_height * inv_zoom;
         float right = left + scaled_width;
         float bottom = top - scaled_height;
-
-        render_background(t_toolbar, left, top, right, bottom, scaled_border);
+        if (bottom_mode) {
+            // first row stays on the bottom, growth is upwards
+            bottom = top - toolbar_height * inv_zoom;
+            block_top = bottom + scaled_height;
+            render_background(t_toolbar, left, block_top, right, bottom, scaled_border);
+        }
+        else
+            render_background(t_toolbar, left, top, right, bottom, scaled_border);
     }
     else {
         float scaled_width = final_toolbar_width * inv_zoom;
@@ -1941,12 +1950,21 @@ void ToolbarKeepSizeRenderer::render(const GLToolbar& t_toolbar, const Camera& t
         if (others_height > 1e-6f) {
             scaled_width = collapse_width * inv_zoom;
             right = left + scaled_width;
-            top = bottom - t_layout.collapsed_offset * factor;
             scaled_height = others_height * inv_zoom;
-            bottom = top - scaled_height;
+            if (bottom_mode) {
+                // extra rows are stacked above the first row
+                bottom = top + t_layout.collapsed_offset * factor;
+                top = bottom + scaled_height;
+                block_top = top;
+            }
+            else {
+                top = bottom - t_layout.collapsed_offset * factor;
+                bottom = top - scaled_height;
+            }
             render_background(t_toolbar, left, top, right, bottom, scaled_border);
         }
     }
+    t_toolbar.set_block_top_world(block_top);
 
     // renders icons
     const auto& t_icon_texture = t_toolbar.get_icon_texture();
@@ -2044,6 +2062,29 @@ void ToolbarKeepSizeRenderer::calculate_position(const GLToolbar& t_toolbar, con
         const auto& t_viewport = t_camera.get_viewport();
         top = 0.5f * (float)t_viewport[3] * inv_zoom;
         left = -0.5f * (float)t_viewport[2] * inv_zoom;
+
+        break;
+    }
+    case ToolbarLayout::EPositionMode::BottomMiddle:
+    {
+        // 'top' is the top edge of the FIRST row, which sits on the bottom of the canvas. It deliberately ignores
+        // toolbar_height (which differs between the recalculate and render calls) so both agree; extra rows are
+        // stacked above it.
+        float inv_zoom = (float)t_camera.get_inv_zoom();
+        const auto& t_viewport = t_camera.get_viewport();
+        const auto cnv_width = t_viewport[2];
+        const auto cnv_height = t_viewport[3];
+        const float bottom_margin = 0.15f * t_layout.icons_size * t_layout.scale;
+        top = (-0.5f * (float)cnv_height + bottom_margin + t_toolbar.get_height()) * inv_zoom;
+        left = -0.5f * (float)cnv_width * inv_zoom;
+        const auto final_width = toolbar_width + t_layout.offset;
+        if (cnv_width < final_width) {
+            left += (t_layout.offset * inv_zoom);
+        }
+        else {
+            const float offset = (cnv_width - final_width) / 2.f;
+            left += (offset + t_layout.offset) * inv_zoom;
+        }
 
         break;
     }
@@ -2299,6 +2340,8 @@ void ToolbarKeepSizeRenderer::recalculate_item_pos(const GLToolbar& t_toolbar, c
     bool line_start = true;
     final_toolbar_height = 0;
 
+    // extra rows go down for a top toolbar and up for a bottom toolbar
+    const float row_dir = t_layout.position_mode == ToolbarLayout::EPositionMode::BottomMiddle ? 1.0f : -1.0f;
     bool offset_flag = true;
     collapse_width = 0.0f;
     bool b_needs_to_double_check_collapse_width = true;
@@ -2380,9 +2423,9 @@ void ToolbarKeepSizeRenderer::recalculate_item_pos(const GLToolbar& t_toolbar, c
         }
         if (new_line) {
             temp_left = left;
-            temp_top -= toolbar_height * inv_zoom;
+            temp_top += row_dir * toolbar_height * inv_zoom;
             if (offset_flag) {
-                temp_top -= t_layout.collapsed_offset * factor;
+                temp_top += row_dir * t_layout.collapsed_offset * factor;
                 offset_flag = false;
             }
             else {

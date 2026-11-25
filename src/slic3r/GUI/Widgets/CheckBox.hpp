@@ -11,6 +11,9 @@ public:
 	CheckBox(wxWindow * parent, int id = wxID_ANY);
 
 public:
+	// bitmap size in DIP (28 in touch mode, otherwise 18)
+	static int icon_size();
+
 	void SetValue(bool value) override;
 
 	void SetHalfChecked(bool value = true);

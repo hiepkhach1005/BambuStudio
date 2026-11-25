@@ -10,6 +10,7 @@
 #include "slic3r/GUI/UserManager.hpp"
 #include "slic3r/GUI/TaskManager.hpp"
 #include "slic3r/GUI/OpenGLManager.hpp"
+#include "slic3r/GUI/TouchDetect.hpp"
 #include "libslic3r/PerfTrace.hpp"
 #include "libslic3r/BuildInfo.hpp"
 #include "format.hpp"
@@ -4600,12 +4601,94 @@ wxSize GUI_App::get_min_size() const
     return wxSize(std::max(1000, 76*m_em_unit), std::max(600, 49 * m_em_unit));
 }
 
+#ifdef _WIN32
+// The screen the main window will open on: the saved window position, else the primary monitor.
+static TouchScreenInfo detect_touch_screen(const AppConfig &config)
+{
+    TouchScreenInfo info;
+    HMONITOR        monitor = nullptr;
+    if (config.has("window_mainframe")) {
+        if (auto metrics = WindowMetrics::deserialize(config.get("window_mainframe"))) {
+            const wxRect r  = metrics->get_rect();
+            const RECT   rc = {r.GetLeft(), r.GetTop(), r.GetLeft() + r.GetWidth(), r.GetTop() + r.GetHeight()};
+            monitor         = ::MonitorFromRect(&rc, MONITOR_DEFAULTTOPRIMARY);
+        }
+    }
+    if (monitor == nullptr) monitor = ::MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+
+    UINT32 count = 0;
+    if (::GetPointerDevices(&count, nullptr) && count > 0) {
+        std::vector<POINTER_DEVICE_INFO> devices(count);
+        if (::GetPointerDevices(&count, devices.data())) {
+            for (UINT32 i = 0; i < count && i < devices.size(); ++i)
+                if (devices[i].pointerDeviceType == POINTER_DEVICE_TYPE_TOUCH && devices[i].monitor == monitor)
+                    info.has_touch = true;
+        }
+    }
+
+    MONITORINFOEXW mi = {};
+    mi.cbSize         = sizeof(mi);
+    if (::GetMonitorInfoW(monitor, &mi)) {
+        if (HDC dc = ::CreateDCW(L"DISPLAY", mi.szDevice, nullptr, nullptr)) {
+            info.width_mm  = ::GetDeviceCaps(dc, HORZSIZE);
+            info.height_mm = ::GetDeviceCaps(dc, VERTSIZE);
+            ::DeleteDC(dc);
+        }
+    }
+    info.slate_mode = ::GetSystemMetrics(SM_CONVERTIBLESLATEMODE) == 0;
+    return info;
+}
+
+struct TouchModeState
+{
+    bool  ready{false};
+    bool  enabled{false};
+    float toolbar_factor{1.4f};
+};
+
+static const TouchModeState &touch_mode_state()
+{
+    static TouchModeState s;
+    if (!s.ready && wxGetApp().app_config) { // app_config may not exist yet on early calls
+        const AppConfig      &config  = *wxGetApp().app_config;
+        const std::string     setting = config.get("touch_mode");
+        const TouchScreenInfo screen  = detect_touch_screen(config);
+        s.enabled        = touch_mode_decide(setting, screen);
+        s.toolbar_factor = touch_toolbar_factor_for(screen);
+        s.ready          = true;
+        BOOST_LOG_TRIVIAL(info) << "touch mode: setting=" << setting << " touch=" << screen.has_touch << " size_mm=" << screen.width_mm << "x"
+                                << screen.height_mm << " diagonal=" << screen.diagonal_inch() << " slate=" << screen.slate_mode
+                                << " -> " << (s.enabled ? "on" : "off");
+    }
+    return s;
+}
+#endif
+
+bool GUI_App::is_touch_mode()
+{
+#ifdef _WIN32
+    return touch_mode_state().enabled;
+#else
+    return false;
+#endif
+}
+
+float GUI_App::touch_toolbar_factor()
+{
+#ifdef _WIN32
+    return touch_mode_state().toolbar_factor;
+#else
+    return 1.4f;
+#endif
+}
+
 float GUI_App::toolbar_icon_scale(bool auto_scale, const bool is_limited/* = false*/) const
 {
 #ifdef __APPLE__
     const float icon_sc = 1.0f; // for Retina display will be used its own scale
 #else
-    const float icon_sc = m_em_unit * 0.1f;
+    // touch mode enlarges the base scale; keep toolbar_icon_scale and set_auto_toolbar_icon_scale in sync
+    const float icon_sc = m_em_unit * 0.1f * (is_touch_mode() ? touch_toolbar_factor() : 1.0f);
 #endif // __APPLE__
 
     if (!auto_scale) {
@@ -4632,7 +4715,8 @@ void GUI_App::set_auto_toolbar_icon_scale(float scale) const
 #ifdef __APPLE__
     const float icon_sc = 1.0f; // for Retina display will be used its own scale
 #else
-    const float icon_sc = m_em_unit * 0.1f;
+    // touch mode enlarges the base scale; keep toolbar_icon_scale and set_auto_toolbar_icon_scale in sync
+    const float icon_sc = m_em_unit * 0.1f * (is_touch_mode() ? touch_toolbar_factor() : 1.0f);
 #endif // __APPLE__
 
     long int_val = std::min(int(std::lround(scale / icon_sc * 100)), 100);

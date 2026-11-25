@@ -16,6 +16,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/Widgets/AxisCtrlButton.hpp
     GUI/Widgets/Button.cpp
     GUI/Widgets/Button.hpp
+    GUI/Widgets/TouchScroll.cpp
+    GUI/Widgets/TouchScroll.hpp
     GUI/Widgets/NozzleChipButton.cpp
     GUI/Widgets/NozzleChipButton.hpp
     GUI/Widgets/CheckBox.cpp
@@ -171,6 +173,11 @@ set(SLIC3R_GUI_SOURCES
     GUI/GLShader.hpp
     GUI/GLCanvas3D.hpp
     GUI/GLCanvas3D.cpp
+    GUI/TouchDetect.hpp
+    GUI/TouchInput.hpp
+    GUI/TouchInput.cpp
+    GUI/TouchWeb/TouchSidebar.hpp
+    GUI/TouchWeb/TouchSidebar.cpp
     GUI/GLEnums.hpp
     GUI/MP4/PBOReader.hpp
     GUI/MP4/PBOReader.cpp
@@ -860,6 +867,29 @@ endif()
 if (TARGET device_page_html_build)
     add_dependencies(libslic3r_gui device_page_html_build)
 endif()
+
+# Touch sidebar bundle: GUI/TouchWeb/sidebar/dist (built with npm, not committed) -> resources/web/touch_sidebar.
+# Same approach as device_page_html: plain directory copy, only when the bundle exists at configure time.
+set(TOUCH_SIDEBAR_DIST_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/GUI/TouchWeb/sidebar/dist")
+set(TOUCH_SIDEBAR_TARGET_DIR "${CMAKE_SOURCE_DIR}/resources/web/touch_sidebar")
+set(TOUCH_SIDEBAR_STAMP      "${CMAKE_CURRENT_BINARY_DIR}/touch_sidebar.stamp")
+if (EXISTS "${TOUCH_SIDEBAR_DIST_DIR}/index.html")
+    file(GLOB_RECURSE TOUCH_SIDEBAR_DIST_FILES CONFIGURE_DEPENDS "${TOUCH_SIDEBAR_DIST_DIR}/*")
+    add_custom_command(
+        OUTPUT "${TOUCH_SIDEBAR_STAMP}"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${TOUCH_SIDEBAR_TARGET_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${TOUCH_SIDEBAR_TARGET_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${TOUCH_SIDEBAR_DIST_DIR}" "${TOUCH_SIDEBAR_TARGET_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E touch "${TOUCH_SIDEBAR_STAMP}"
+        DEPENDS ${TOUCH_SIDEBAR_DIST_FILES}
+        COMMENT "Copying touch sidebar bundle to resources/web/touch_sidebar..."
+        VERBATIM
+    )
+    add_custom_target(touch_sidebar_build DEPENDS "${TOUCH_SIDEBAR_STAMP}")
+    add_dependencies(libslic3r_gui touch_sidebar_build)
+else ()
+    message(STATUS "Touch sidebar bundle not found (${TOUCH_SIDEBAR_DIST_DIR}); touch mode falls back to the native sidebar")
+endif ()
 
 #if (MSVC)
 #    target_compile_options(libslic3r_gui PRIVATE /Od /Zi)

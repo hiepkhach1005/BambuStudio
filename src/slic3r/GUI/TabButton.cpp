@@ -235,8 +235,10 @@ void TabButton::mouseReleased(wxMouseEvent &event)
     event.Skip();
     if (pressedDown) {
         pressedDown = false;
-        ReleaseMouse();
-        if (wxRect({0, 0}, GetSize()).Contains(event.GetPosition()))
+        if (HasCapture())
+            ReleaseMouse();
+        // Release slop: finger taps drift a few px. Idea from upstream PR bambulab/BambuStudio#10385.
+        if (wxRect({0, 0}, GetSize()).Inflate(FromDIP(15)).Contains(event.GetPosition()))
             sendButtonEvent();
     }
 }

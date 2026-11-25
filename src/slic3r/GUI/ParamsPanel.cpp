@@ -18,6 +18,7 @@
 #include "Widgets/Button.hpp"
 #include "GUI_Factories.hpp"
 #include "libslic3r/Log.hpp"
+#include "Widgets/TouchScroll.hpp"
 
 
 namespace Slic3r {
@@ -392,6 +393,7 @@ ParamsPanel::ParamsPanel( wxWindow* parent, wxWindowID id, const wxPoint& pos, c
     };
 
     m_page_view = new PageScrolledWindow(page_parent);
+    install_touch_scroll(m_page_view);
     m_page_view->SetBackgroundColour(*wxWHITE);
     m_page_sizer = new wxBoxSizer(wxVERTICAL);
 

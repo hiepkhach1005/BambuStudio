@@ -1,18 +1,21 @@
 #include "CheckBox.hpp"
 
 #include "../wxExtensions.hpp"
+#include "../GUI_App.hpp"
+
+int CheckBox::icon_size() { return Slic3r::GUI::GUI_App::is_touch_mode() ? 28 : 18; }
 
 CheckBox::CheckBox(wxWindow *parent, int id)
     : wxBitmapToggleButton(parent, id, wxNullBitmap, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE)
-    , m_on(this, "check_on", 18)
-    , m_half(this, "check_half", 18)
-    , m_off(this, "check_off", 18)
-    , m_on_disabled(this, "check_on_disabled", 18)
-    , m_half_disabled(this, "check_half_disabled", 18)
-    , m_off_disabled(this, "check_off_disabled", 18)
-    , m_on_focused(this, "check_on_focused", 18)
-    , m_half_focused(this, "check_half_focused", 18)
-    , m_off_focused(this, "check_off_focused", 18)
+    , m_on(this, "check_on", CheckBox::icon_size())
+    , m_half(this, "check_half", CheckBox::icon_size())
+    , m_off(this, "check_off", CheckBox::icon_size())
+    , m_on_disabled(this, "check_on_disabled", CheckBox::icon_size())
+    , m_half_disabled(this, "check_half_disabled", CheckBox::icon_size())
+    , m_off_disabled(this, "check_off_disabled", CheckBox::icon_size())
+    , m_on_focused(this, "check_on_focused", CheckBox::icon_size())
+    , m_half_focused(this, "check_half_focused", CheckBox::icon_size())
+    , m_off_focused(this, "check_off_focused", CheckBox::icon_size())
 {
 	//SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
 	if (parent)

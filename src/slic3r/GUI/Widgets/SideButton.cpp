@@ -370,7 +370,8 @@ void SideButton::mouseReleased(wxMouseEvent& event)
 
     if (pressedDown) {
         pressedDown = false;
-        if (wxRect({0, 0}, GetSize()).Contains(event.GetPosition()))
+        // Release slop: finger taps drift a few px. Idea from upstream PR bambulab/BambuStudio#10385.
+        if (wxRect({0, 0}, GetSize()).Inflate(FromDIP(15)).Contains(event.GetPosition()))
             sendButtonEvent();
     }
 }

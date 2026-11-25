@@ -276,6 +276,10 @@ void AppConfig::set_defaults()
         set_bool("use_legacy_3DConnexion", true);
 //#endif
 
+    // Touch mode (Windows only, takes effect after restart): "auto", "1" or "0"
+    if (get("touch_mode").empty())
+        set("touch_mode", "auto");
+
 #ifdef SUPPORT_DARK_MODE
     if (get("dark_color_mode").empty())
         set("dark_color_mode", "0");

@@ -1,5 +1,7 @@
 #include "libslic3r/libslic3r.h"
 #include "GLCanvas3D.hpp"
+#include <chrono>
+#include <cmath>
 #include "WipeTowerPlacement.hpp"
 #include "Overview/AssemblyStepsUtils.hpp"
 #include "Overview/OverviewUtils.hpp"
@@ -146,6 +148,11 @@ static constexpr const size_t MAX_VERTEX_BUFFER_SIZE     = 131072 * 6; // 3.15MB
 static constexpr const size_t VERTEX_BUFFER_RESERVE_SIZE = 131072 * 2; // 1.05MB
 // Reserve size in number of floats, maximum sum of all preallocated buffers.
 //static constexpr const size_t VERTEX_BUFFER_RESERVE_SIZE_SUM_MAX = 1024 * 1024 * 128 / 4; // 128MB
+
+#ifdef _WIN32 // after every other header: winsock2 must come before windows.h
+#include <wx/msw/wrapwin.h>
+#include <commctrl.h>
+#endif
 
 namespace Slic3r {
 namespace GUI {
@@ -405,7 +412,11 @@ void GLCanvas3D::LayersEditing::render_variable_layer_height_dialog(const GLCanv
     }
     x = std::max(x, 0.0f);
 
-    imgui.set_next_window_pos(x, main_toolbar_height, ImGuiCond_Always, 0.0f, 0.0f);
+    float popup_y = main_toolbar_height, popup_pivot_y = 0.0f, popup_max_h = -1.0f;
+    canvas.get_main_toolbar_popup_anchor(popup_y, popup_pivot_y, popup_max_h);
+    imgui.set_next_window_pos(x, popup_y, ImGuiCond_Always, 0.0f, popup_pivot_y);
+    if (popup_max_h > 0.0f)
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, popup_max_h));
 
     imgui.push_toolbar_style(canvas.get_scale());
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f * canvas.get_scale(), 4.0f * canvas.get_scale()));
@@ -487,7 +498,10 @@ void GLCanvas3D::LayersEditing::render_variable_layer_height_dialog(const GLCanv
     ImGui::Separator();
 
     float get_cur_y = ImGui::GetContentRegionMax().y + ImGui::GetFrameHeight();
-    if (p_main_toolbar) {
+    if (canvas.is_main_toolbar_at_bottom()) {
+        get_cur_y += ImGui::GetWindowPos().y; // window grows upwards, it is not at the toolbar height
+    }
+    else if (p_main_toolbar) {
         get_cur_y += p_main_toolbar->get_height();
     }
     std::map<wxString, wxString> captions_texts = {
@@ -1640,6 +1654,7 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas, Bed3D &bed)
 
 GLCanvas3D::~GLCanvas3D()
 {
+    touch_uninstall();
     reset_volumes(false);
 
     m_sel_plate_toolbar.del_all_item();
@@ -2934,6 +2949,39 @@ int GLCanvas3D::get_main_toolbar_width() const
     return p_main_toolbar->get_width();
 }
 
+bool GLCanvas3D::is_main_toolbar_at_bottom() const
+{
+    const auto& p_main_toolbar = get_main_toolbar();
+    return p_main_toolbar && p_main_toolbar->is_enabled() && p_main_toolbar->is_bottom_positioned();
+}
+
+void GLCanvas3D::get_main_toolbar_popup_anchor(float& y, float& pivot_y, float& max_height) const
+{
+    const auto& p_main_toolbar = get_main_toolbar();
+    max_height = -1.0f;
+    if (!is_main_toolbar_at_bottom()) {
+        y = p_main_toolbar ? p_main_toolbar->get_height() : 0.0f;
+        pivot_y = 0.0f;
+        return;
+    }
+    const float canvas_h = float(get_canvas_size().get_height());
+    const float zoom = (float)get_active_camera().get_zoom();
+    // block_top comes from the renderer that also produced the hit-test rectangles
+    y = std::max(0.0f, 0.5f * canvas_h - p_main_toolbar->get_block_top_world() * zoom - 4.0f);
+    pivot_y = 1.0f;
+    max_height = std::max(y - 4.0f, 50.0f);
+}
+
+float GLCanvas3D::get_main_toolbar_free_bottom() const
+{
+    const float canvas_h = float(get_canvas_size().get_height());
+    if (!is_main_toolbar_at_bottom())
+        return canvas_h;
+    float y, pivot, max_h;
+    get_main_toolbar_popup_anchor(y, pivot, max_h);
+    return y;
+}
+
 float GLCanvas3D::get_main_toolbar_scale() const
 {
     const auto& p_main_toolbar = get_main_toolbar();
@@ -3075,7 +3123,8 @@ void GLCanvas3D::render(bool only_init)
 
     if (m_main_toolbar) {
         if (m_canvas_type == ECanvasType::CanvasView3D) {
-            const auto toolbar_style = p_ogl_manager->get_toolbar_rendering_style();
+            // touch mode forces the collapsible KeepSize style; the saved "toolbar_style" is not modified
+            const auto toolbar_style = GUI_App::is_touch_mode() ? uint8_t(GLToolbar::EToolbarRenderingMode::KeepSize) : p_ogl_manager->get_toolbar_rendering_style();
             m_main_toolbar->set_rendering_mode(static_cast<GLToolbar::EToolbarRenderingMode>(toolbar_style));
         }
     }
@@ -4597,6 +4646,7 @@ void GLCanvas3D::bind_event_handlers()
         m_canvas->Bind(wxEVT_SET_FOCUS, &GLCanvas3D::on_set_focus, this);
         m_canvas->Bind(wxEVT_KILL_FOCUS, &GLCanvas3D::on_kill_focus, this);
         m_event_handlers_bound = true;
+        touch_install();
 
         m_canvas->Bind(wxEVT_GESTURE_PAN, &GLCanvas3D::on_gesture, this);
         m_canvas->Bind(wxEVT_GESTURE_ZOOM, &GLCanvas3D::on_gesture, this);
@@ -4634,6 +4684,7 @@ void GLCanvas3D::unbind_event_handlers()
         m_canvas->Unbind(wxEVT_PAINT, &GLCanvas3D::on_paint, this);
         m_canvas->Unbind(wxEVT_SET_FOCUS, &GLCanvas3D::on_set_focus, this);
         m_event_handlers_bound = false;
+        touch_uninstall();
 
         m_canvas->Unbind(wxEVT_GESTURE_PAN, &GLCanvas3D::on_gesture, this);
         m_canvas->Unbind(wxEVT_GESTURE_ZOOM, &GLCanvas3D::on_gesture, this);
@@ -5712,6 +5763,192 @@ std::string format_mouse_event_debug_message(const wxMouseEvent &evt)
 }
 #endif /* SLIC3R_DEBUG_MOUSE_EVENTS */
 
+
+// ---------------------------------------------------------------------------
+// Windows touch adapter. The pure gesture logic lives in TouchInput.{hpp,cpp}.
+// ---------------------------------------------------------------------------
+#ifdef _WIN32
+#ifndef WM_POINTERUPDATE
+#define WM_POINTERUPDATE 0x0245
+#define WM_POINTERDOWN 0x0246
+#define WM_POINTERUP 0x0247
+#define WM_POINTERCAPTURECHANGED 0x024C
+#endif
+
+namespace {
+constexpr UINT_PTR kTouchSubclassId = 0x7C3D0001;
+constexpr DWORD kPtTouch = 2; // PT_TOUCH
+constexpr WORD kPointerPrimary = 0x2000; // POINTER_MESSAGE_FLAG_PRIMARY
+
+bool pointer_is_touch(UINT id)
+{
+    using Fn = BOOL(WINAPI*)(UINT32, DWORD*);
+    static Fn fn = [] { HMODULE m = GetModuleHandleW(L"user32.dll"); return m ? (Fn) GetProcAddress(m, "GetPointerType") : nullptr; }();
+    DWORD t = 0;
+    return fn && fn(id, &t) && t == kPtTouch;
+}
+int64_t touch_now_ms()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+LRESULT CALLBACK touch_subclass_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR ref)
+{
+    auto* self = reinterpret_cast<GLCanvas3D*>(ref);
+    switch (msg) {
+    case WM_POINTERDOWN:
+    case WM_POINTERUPDATE:
+    case WM_POINTERUP: {
+        const UINT id = LOWORD(wp);
+        // pen and mouse pass through unchanged
+        if (pointer_is_touch(id) && self->on_touch_pointer(msg, id, (short) LOWORD(lp), (short) HIWORD(lp), (HIWORD(wp) & kPointerPrimary) != 0))
+            return 0; // not calling DefWindowProc prevents promotion to mouse messages
+        break;
+    }
+    case WM_POINTERCAPTURECHANGED:
+        // pointer id is in wParam; unknown (non-touch/untracked) ids are ignored by the state machine
+        self->on_touch_pointer(msg, LOWORD(wp), 0, 0, false);
+        break;
+    case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
+    case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_RBUTTONDBLCLK:
+    case WM_MOUSEMOVE:
+        // safety net: drop any mouse message that Windows still promoted from touch (signature 0xFF515780)
+        if ((GetMessageExtraInfo() & 0xFFFFFF80) == 0xFF515780)
+            return 0;
+        break;
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hwnd, touch_subclass_proc, kTouchSubclassId);
+        break;
+    }
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+} // namespace
+#endif // _WIN32
+
+void GLCanvas3D::touch_install()
+{
+#ifdef _WIN32
+    if (m_canvas == nullptr || m_touch_hwnd != nullptr || !GUI_App::is_touch_mode())
+        return;
+    HWND hwnd = (HWND) m_canvas->GetHWND();
+    if (hwnd == nullptr || !SetWindowSubclass(hwnd, touch_subclass_proc, kTouchSubclassId, (DWORD_PTR) this))
+        return;
+    m_touch_hwnd = hwnd;
+    if (!m_touch) m_touch = std::make_unique<TouchGesture>();
+    m_touch_timer.SetOwner(&m_touch_handler);
+    m_touch_handler.Bind(wxEVT_TIMER, &GLCanvas3D::on_touch_timer, this);
+#endif
+}
+
+void GLCanvas3D::touch_uninstall()
+{
+#ifdef _WIN32
+    m_touch_timer.Stop();
+    m_touch_handler.Unbind(wxEVT_TIMER, &GLCanvas3D::on_touch_timer, this);
+    if (m_touch_hwnd != nullptr) {
+        if (IsWindow((HWND) m_touch_hwnd))
+            RemoveWindowSubclass((HWND) m_touch_hwnd, touch_subclass_proc, kTouchSubclassId);
+        m_touch_hwnd = nullptr;
+    }
+    if (m_touch) m_touch->reset();
+#endif
+}
+
+bool GLCanvas3D::on_touch_pointer(unsigned msg, unsigned pointer_id, long sx, long sy, bool primary)
+{
+#ifdef _WIN32
+    if (!m_touch || !m_canvas || !GUI_App::is_touch_mode())
+        return false;
+    TouchEvent te;
+    te.id = (int) pointer_id;
+    te.t_ms = touch_now_ms();
+    if (msg == WM_POINTERCAPTURECHANGED) {
+        te.type = TouchEvent::Cancel;
+    } else {
+        POINT pt{sx, sy};
+        ScreenToClient((HWND) m_touch_hwnd, &pt); // physical client pixels == wxMouseEvent space on MSW
+        te.x = pt.x; te.y = pt.y;
+        te.type = msg == WM_POINTERDOWN ? TouchEvent::Down : msg == WM_POINTERUP ? TouchEvent::Up : TouchEvent::Update;
+    }
+    // A primary contact means no other finger is down: drop contacts whose release was lost (e.g. to a modal menu).
+    if (te.type == TouchEvent::Down && primary && m_touch->active())
+        touch_apply_actions(m_touch->abort());
+    m_touch->set_long_press_enabled(!m_gizmos.is_paint_gizmo() && !m_tooltip.is_in_imgui());
+    touch_apply_actions(m_touch->on_event(te));
+    if (m_touch->active()) {
+        if (!m_touch_timer.IsRunning()) m_touch_timer.Start(25);
+    } else
+        m_touch_timer.Stop();
+    return msg != WM_POINTERCAPTURECHANGED;
+#else
+    return false;
+#endif
+}
+
+void GLCanvas3D::on_touch_timer(wxTimerEvent&)
+{
+    if (!m_touch) return;
+    m_touch->set_long_press_enabled(!m_gizmos.is_paint_gizmo() && !m_tooltip.is_in_imgui());
+    touch_apply_actions(m_touch->on_tick(
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()));
+    if (!m_touch->active()) m_touch_timer.Stop();
+}
+
+void GLCanvas3D::touch_apply_actions(const std::vector<TouchAction>& actions)
+{
+    if (!m_canvas) return;
+    auto send = [this](wxEventType type, const TouchAction& a, bool left_down) {
+        wxMouseEvent e(type);
+        e.SetEventObject(m_canvas);
+        e.SetId(m_canvas->GetId());
+        e.SetX((int) std::lround(a.x));
+        e.SetY((int) std::lround(a.y));
+        e.SetLeftDown(left_down);
+        on_mouse(e);
+    };
+    for (const TouchAction& a : actions) {
+        switch (a.kind) {
+        // Hover goes first so ImGui/toolbars know the position before a press (touch has no hover).
+        case TouchAction::Hover:      send(wxEVT_MOTION, a, false); break;
+        case TouchAction::LeftDown:
+            send(wxEVT_MOTION, a, false);
+            // Picking happens while rendering: without a frame here a quick tap would hit what was under the previous position.
+            m_dirty = true;
+            render();
+            send(wxEVT_LEFT_DOWN, a, true);
+            break;
+        case TouchAction::LeftMove:   send(wxEVT_MOTION, a, true); break;
+        case TouchAction::LeftUp:     send(wxEVT_LEFT_UP, a, false); break;
+        case TouchAction::LeftCancel: m_mouse.ignore_left_up = true; send(wxEVT_LEFT_UP, a, false); break;
+        case TouchAction::LongPress:
+            // end the left press without a click, then reuse the right-click path (context menu on RIGHT_UP)
+            m_mouse.ignore_left_up = true;
+            send(wxEVT_LEFT_UP, a, false);
+            send(wxEVT_RIGHT_DOWN, a, false);
+            send(wxEVT_RIGHT_UP, a, false);
+            break;
+        case TouchAction::Pan: {
+            if (!m_initialized || !_set_current(true)) break;
+            Camera& camera = get_active_camera();
+            float z = 0;
+            const Vec3d p2 = _mouse_to_3d(camera, {a.x, a.y}, &z);
+            const Vec3d p1 = _mouse_to_3d(camera, {a.x - a.dx, a.y - a.dy}, &z);
+            camera.set_target(camera.get_target() + p1 - p2);
+            m_mouse.position = Vec2d(a.x, a.y);
+            m_dirty = true;
+            break;
+        }
+        case TouchAction::Zoom: {
+            if (!m_initialized || !_set_current(true)) break;
+            // zoom around the centroid (honours the "zoom_to_mouse" preference like the wheel does)
+            _update_camera_zoom(get_active_camera().get_zoom() * a.factor, Point((int) a.x, (int) a.y));
+            m_dirty = true;
+            break;
+        }
+        }
+    }
+}
+
 void GLCanvas3D::on_gesture(wxGestureEvent &evt)
 {
     if (!m_initialized || !_set_current(true))
@@ -5733,8 +5970,15 @@ void GLCanvas3D::on_gesture(wxGestureEvent &evt)
         // Match the mouse-wheel preferences on Mac trackpad pinch.
         if (wxGetApp().app_config->get_bool("reverse_mouse_wheel_zoom"))
             factor = 1.f / std::max(factor, 1e-3f);
+#ifdef __WXMSW__
+        // MSW: GetPosition() is client coordinates in physical pixels, the same space as m_mouse.position
+        // (no retina scaling on Windows) but not stale. Other platforms keep the previous behaviour.
+        const double mx = evt.GetPosition().x;
+        const double my = evt.GetPosition().y;
+#else
         const double mx = m_mouse.position.x();
         const double my = m_mouse.position.y();
+#endif
         const Size cnv_size = get_canvas_size();
         if (mx < 0.f || my < 0.f || mx >= cnv_size.get_width() || my >= cnv_size.get_height())
             return;
@@ -7615,7 +7859,11 @@ bool GLCanvas3D::_render_orient_menu(float left, float right, float bottom, floa
     if (p_main_toolbar) {
         main_toolbar_height = p_main_toolbar->get_height();
     }
-    imgui->set_next_window_pos(x, main_toolbar_height, ImGuiCond_Always, 0.5f, 0.0f);
+    float popup_y = main_toolbar_height, popup_pivot_y = 0.0f, popup_max_h = -1.0f;
+    get_main_toolbar_popup_anchor(popup_y, popup_pivot_y, popup_max_h);
+    imgui->set_next_window_pos(x, popup_y, ImGuiCond_Always, 0.5f, popup_pivot_y);
+    if (popup_max_h > 0.0f)
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, popup_max_h));
 #else
     float main_toolbar_width = 0.0f;
     const auto& p_main_toolbar = get_main_toolbar();
@@ -7705,7 +7953,12 @@ bool GLCanvas3D::_render_arrange_menu(float left, float toolbar_height)
 #if BBS_TOOLBAR_ON_TOP
     float zoom = (float)get_active_camera().get_zoom();
     const float x = 0.5 * canvas_w + left * zoom;
-    imgui->set_next_window_pos(x, toolbar_height, ImGuiCond_Always, 0.0f, 0.0f);
+    float popup_y = toolbar_height, popup_pivot_y = 0.0f, popup_max_h = -1.0f;
+    if (is_main_toolbar_at_bottom())
+        get_main_toolbar_popup_anchor(popup_y, popup_pivot_y, popup_max_h);
+    imgui->set_next_window_pos(x, popup_y, ImGuiCond_Always, 0.0f, popup_pivot_y);
+    if (popup_max_h > 0.0f)
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, popup_max_h));
 
 #else
     float main_toolbar_width = 0.0f;
@@ -9623,7 +9876,8 @@ void GLCanvas3D::_check_and_update_toolbar_icon_scale()
 #if ENABLE_RETINA_GL
     new_scale /= m_retina_helper->get_scale_factor();
 #endif
-    if (fabs(new_scale - scale) > 0.01) // scale is changed by 1% and more
+    // touch mode always uses KeepSize (toolkit_size is ignored); do not overwrite the user's saved value
+    if (!GUI_App::is_touch_mode() && fabs(new_scale - scale) > 0.01) // scale is changed by 1% and more
         wxGetApp().set_auto_toolbar_icon_scale(new_scale);
 }
 
@@ -9843,11 +10097,30 @@ void GLCanvas3D::_render_main_toolbar()
         float inv_zoom = (float)t_camera.get_inv_zoom();
         const auto& t_viewport = t_camera.get_viewport();
         float left = get_main_toolbar_left(t_viewport[2], inv_zoom);
-        if (is_collapse_toolbar_on_left()) {
-            p_main_toolbar->set_offset(get_collapse_toolbar_width() * 2.0f);
+        if (GUI_App::is_touch_mode() && m_canvas_type == ECanvasType::CanvasView3D) {
+            // bottom centre; the collapse toolbar stays at the top left so it needs no room here, but keep clear of
+            // the 3D navigator in the bottom left corner
+            float reserve = 0.0f;
+            if (wxGetApp().show_3d_navigator() && can_show_3d_navigator()) {
+                float sc = get_scale();
+#ifdef WIN32
+                const int dpi = get_dpi_for_window(wxGetApp().GetTopWindow());
+                sc *= (float) dpi / (float) DPI_DEFAULT;
+#endif // WIN32
+                reserve = 128 * sc + 5;
+            }
+            p_main_toolbar->set_position_mode(ToolbarLayout::EPositionMode::BottomMiddle);
+            p_main_toolbar->set_offset(reserve);
         }
         else {
-            p_main_toolbar->set_offset(0.0f);
+            if (m_canvas_type == ECanvasType::CanvasView3D)
+                p_main_toolbar->set_position_mode(ToolbarLayout::EPositionMode::TopMiddle);
+            if (is_collapse_toolbar_on_left()) {
+                p_main_toolbar->set_offset(get_collapse_toolbar_width() * 2.0f);
+            }
+            else {
+                p_main_toolbar->set_offset(0.0f);
+            }
         }
     }
     p_main_toolbar->render(t_camera);

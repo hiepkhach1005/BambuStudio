@@ -1,0 +1,5 @@
+foreach(t libzstd_shared libzstd_static)
+    if(NOT TARGET zstd::${t})
+        add_library(zstd::${t} INTERFACE IMPORTED)
+    endif()
+endforeach()

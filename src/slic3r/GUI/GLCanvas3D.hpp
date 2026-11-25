@@ -23,6 +23,7 @@
 #include "libslic3r/Slicing.hpp"
 #include "libslic3r/Point.hpp"
 #include "GLEnums.hpp"
+#include "TouchInput.hpp"
 
 #include <float.h>
 
@@ -652,6 +653,11 @@ private:
     // see request_extra_frame()
     bool m_extra_frame_requested;
     bool m_event_handlers_bound{ false };
+    // Touch gesture adapter state (see TouchInput.hpp)
+    std::unique_ptr<TouchGesture> m_touch;
+    wxEvtHandler                  m_touch_handler;
+    wxTimer                       m_touch_timer;
+    void*                         m_touch_hwnd{nullptr};
 
 
     GLVolumeCollection m_paint_outline_volumes;
@@ -1028,6 +1034,13 @@ public:
     float get_main_toolbar_left(int cnv_width,float inv_zoom) const;
     int   get_main_toolbar_height() const;
     int   get_main_toolbar_width() const;
+    // Touch mode: main toolbar sits at the bottom centre of the canvas (3D view only).
+    bool  is_main_toolbar_at_bottom() const;
+    // Anchor for popups opened from the main toolbar (canvas pixels, y down). Top toolbar: below it, pivot_y 0.
+    // Bottom toolbar: above the whole toolbar block, pivot_y 1, max_height = space above the anchor (-1 if unlimited).
+    void  get_main_toolbar_popup_anchor(float& y, float& pivot_y, float& max_height) const;
+    // y (canvas pixels) of the lowest line free for panels; canvas height unless a bottom toolbar occupies it.
+    float get_main_toolbar_free_bottom() const;
     float get_main_toolbar_scale() const;
     float get_assembly_paint_toolbar_width() const { return m_paint_toolbar_width; }
     bool  is_collapse_toolbar_on_left() const;
@@ -1214,6 +1227,12 @@ public:
     void on_set_color_timer(wxTimerEvent& evt);
     void on_mouse(wxMouseEvent& evt);
     void on_gesture(wxGestureEvent& evt);
+    // Windows touch (active only in touch mode). Returns true when the pointer message was consumed.
+    bool on_touch_pointer(unsigned msg, unsigned pointer_id, long screen_x, long screen_y, bool primary);
+    void touch_apply_actions(const std::vector<TouchAction>& actions);
+    void on_touch_timer(wxTimerEvent&);
+    void touch_install();
+    void touch_uninstall();
     void on_paint(wxPaintEvent& evt);
     void on_kill_focus(wxFocusEvent &evt);
     void on_set_focus(wxFocusEvent& evt);

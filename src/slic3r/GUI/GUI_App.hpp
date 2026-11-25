@@ -478,6 +478,11 @@ public:
     HMSQueryMgr* get_hms_query_mgr() { return hms_query_mgr; }
     NetworkAgent* getAgent() { return m_agent; }
     FilamentColorCodeQuery* get_filament_color_code_query();
+    // Touch mode: decided once at first call from "touch_mode" (auto/1/0) and the screen the main window
+    // opens on (see TouchDetect.hpp); always false off Windows. Changes need a restart.
+    static bool is_touch_mode();
+    // Multiplier applied to the 3D toolbar base icon scale in touch mode.
+    static float touch_toolbar_factor();
     bool is_editor() const { return m_app_mode == EAppMode::Editor; }
     bool is_gcode_viewer() const { return m_app_mode == EAppMode::GCodeViewer; }
     bool is_recreating_gui() const { return m_is_recreating_gui; }
